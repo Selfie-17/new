@@ -1,0 +1,292 @@
+/* Import KaTeX styles for math rendering - must be first */
+@import 'katex/dist/katex.min.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* =============================================
+   GITHUB-STYLE MARKDOWN PREVIEW STYLES
+   ============================================= */
+
+.markdown-preview {
+    @apply text-gray-800 leading-relaxed;
+}
+
+/* Headings */
+.markdown-preview h1 {
+    @apply text-3xl font-bold mb-4 mt-8 pb-2 border-b border-gray-200;
+}
+
+.markdown-preview h2 {
+    @apply text-2xl font-bold mb-3 mt-6 pb-2 border-b border-gray-100;
+}
+
+.markdown-preview h3 {
+    @apply text-xl font-bold mb-2 mt-5;
+}
+
+.markdown-preview h4 {
+    @apply text-lg font-bold mb-2 mt-4;
+}
+
+.markdown-preview h5 {
+    @apply text-base font-bold mb-1 mt-3;
+}
+
+.markdown-preview h6 {
+    @apply text-sm font-bold mb-1 mt-3 text-gray-600;
+}
+
+/* Paragraphs */
+.markdown-preview p {
+    @apply mb-4 leading-relaxed;
+}
+
+/* Lists */
+.markdown-preview ul {
+    @apply list-disc pl-6 mb-4;
+}
+
+.markdown-preview ol {
+    @apply list-decimal pl-6 mb-4;
+}
+
+.markdown-preview li {
+    @apply mb-1;
+}
+
+.markdown-preview li>ul,
+.markdown-preview li>ol {
+    @apply mt-1 mb-0;
+}
+
+/* Nested lists */
+.markdown-preview ul ul,
+.markdown-preview ol ul {
+    list-style-type: circle;
+}
+
+.markdown-preview ul ul ul,
+.markdown-preview ol ul ul {
+    list-style-type: square;
+}
+
+/* Task lists */
+.markdown-preview .contains-task-list {
+    @apply list-none pl-0;
+}
+
+.markdown-preview .task-list-item {
+    @apply flex items-start gap-2 list-none;
+}
+
+/* Inline code */
+.markdown-preview code:not(pre code) {
+    @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+/* Code blocks */
+.markdown-preview pre {
+    @apply rounded-lg mb-4 overflow-x-auto;
+}
+
+.markdown-preview pre code {
+    @apply bg-transparent text-inherit p-0;
+}
+
+/* Blockquotes */
+.markdown-preview blockquote {
+    @apply border-l-4 border-blue-500 bg-blue-50 pl-4 pr-4 py-2 my-4 text-gray-700 italic rounded-r;
+}
+
+.markdown-preview blockquote blockquote {
+    @apply border-l-blue-400 bg-blue-100/50 mt-2;
+}
+
+/* Links */
+.markdown-preview a {
+    @apply text-blue-600 hover:text-blue-800 hover:underline;
+}
+
+/* Images */
+.markdown-preview img {
+    @apply max-w-full h-auto rounded-lg shadow-sm border border-gray-200 my-4;
+}
+
+/* Tables */
+.markdown-preview table {
+    @apply w-full border-collapse mb-4 text-sm;
+}
+
+.markdown-preview thead {
+    @apply bg-gray-50;
+}
+
+.markdown-preview th {
+    @apply border border-gray-300 px-4 py-2 font-semibold text-left text-gray-700;
+}
+
+.markdown-preview td {
+    @apply border border-gray-300 px-4 py-2 text-gray-600;
+}
+
+.markdown-preview tr:hover {
+    @apply bg-gray-50;
+}
+
+/* Table alignment */
+.markdown-preview th[align="center"],
+.markdown-preview td[align="center"] {
+    @apply text-center;
+}
+
+.markdown-preview th[align="right"],
+.markdown-preview td[align="right"] {
+    @apply text-right;
+}
+
+/* Horizontal rule */
+.markdown-preview hr {
+    @apply my-8 border-t-2 border-gray-200;
+}
+
+/* Strikethrough */
+.markdown-preview del {
+    @apply text-gray-500 line-through;
+}
+
+/* Strong/Bold */
+.markdown-preview strong {
+    @apply font-bold text-gray-900;
+}
+
+/* Emphasis/Italic */
+.markdown-preview em {
+    @apply italic;
+}
+
+/* Keyboard keys */
+.markdown-preview kbd {
+    @apply bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 text-xs font-mono shadow-sm;
+}
+
+/* Subscript and Superscript */
+.markdown-preview sub {
+    @apply text-xs;
+}
+
+.markdown-preview sup {
+    @apply text-xs;
+}
+
+/* Footnotes */
+.markdown-preview .footnotes {
+    @apply mt-8 pt-4 border-t border-gray-200 text-sm text-gray-600;
+}
+
+.markdown-preview .footnote-ref {
+    @apply text-blue-600 text-xs align-super;
+}
+
+.markdown-preview .footnote-backref {
+    @apply text-blue-600 ml-1;
+}
+
+/* KaTeX math overrides */
+.markdown-preview .katex {
+    @apply text-base;
+}
+
+.markdown-preview .katex-display {
+    @apply my-4 overflow-x-auto py-2;
+}
+
+.markdown-preview .katex-display>.katex {
+    @apply text-lg;
+}
+
+/* GitHub-style alerts/notes */
+.markdown-preview .note,
+.markdown-preview .warning,
+.markdown-preview .tip,
+.markdown-preview .important,
+.markdown-preview .caution {
+    @apply p-4 rounded-lg mb-4;
+}
+
+.markdown-preview .note {
+    @apply bg-blue-50 border-l-4 border-blue-500;
+}
+
+.markdown-preview .warning {
+    @apply bg-yellow-50 border-l-4 border-yellow-500;
+}
+
+.markdown-preview .tip {
+    @apply bg-green-50 border-l-4 border-green-500;
+}
+
+.markdown-preview .important {
+    @apply bg-purple-50 border-l-4 border-purple-500;
+}
+
+.markdown-preview .caution {
+    @apply bg-red-50 border-l-4 border-red-500;
+}
+
+/* Definition lists */
+.markdown-preview dl {
+    @apply mb-4;
+}
+
+.markdown-preview dt {
+    @apply font-bold text-gray-900 mt-4;
+}
+
+.markdown-preview dd {
+    @apply ml-4 text-gray-600;
+}
+
+/* Abbreviations */
+.markdown-preview abbr {
+    @apply border-b border-dotted border-gray-400 cursor-help;
+}
+
+/* Mark/Highlight */
+.markdown-preview mark {
+    @apply bg-yellow-200 px-0.5 rounded;
+}
+
+/* Details/Summary (collapsible) */
+.markdown-preview details {
+    @apply mb-4 border border-gray-200 rounded-lg;
+}
+
+.markdown-preview summary {
+    @apply px-4 py-2 bg-gray-50 cursor-pointer font-medium hover:bg-gray-100 rounded-t-lg;
+}
+
+.markdown-preview details[open] summary {
+    @apply border-b border-gray-200;
+}
+
+.markdown-preview details>*:not(summary) {
+    @apply px-4;
+}
+
+/* Syntax highlighter adjustments */
+.markdown-preview .react-syntax-highlighter-line-number {
+    @apply text-gray-500 pr-4 select-none;
+}
+
+/* First heading should not have top margin */
+.markdown-preview>h1:first-child,
+.markdown-preview>h2:first-child,
+.markdown-preview>h3:first-child {
+    @apply mt-0;
+}
