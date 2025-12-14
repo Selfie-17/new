@@ -25,23 +25,84 @@ export function NotificationProvider({ children }) {
     useEffect(() => {
         if (user) {
             const token = localStorage.getItem('token');
-            const baseURL = import.meta.env.VITE_API_BASE_URL || '';
+            // Get baseURL - use environment variable or default to localhost:5000
+            // Socket.IO needs the full backend URL, not the proxy
+            let baseURL = import.meta.env.VITE_API_BASE_URL;
+            
+            // If no env variable, determine the correct backend URL
+            if (!baseURL || baseURL.trim() === '') {
+                // Check if we're in development (Vite dev server on port 3000)
+                if (import.meta.env.DEV) {
+                    // In dev, backend is on port 5000
+                    baseURL = 'http://localhost:5000';
+                } else {
+                    // In production, use same origin (backend should be on same domain)
+                    baseURL = window.location.origin;
+                }
+            }
+            
+            // Remove trailing slash if present
+            baseURL = baseURL.replace(/\/$/, '');
+            
+            // Ensure baseURL is not empty and is a valid URL
+            if (!baseURL || (!baseURL.startsWith('http://') && !baseURL.startsWith('https://'))) {
+                console.error('Socket.IO: Invalid API base URL:', baseURL);
+                return;
+            }
+            
+            console.log('Socket.IO: Connecting to', baseURL);
+            
             if (token) {
                 const newSocket = io(baseURL, {
                     auth: { token },
-                    transports: ['websocket', 'polling']
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionDelay: 1000,
+                    reconnectionDelayMax: 5000,
+                    reconnectionAttempts: 5,
+                    timeout: 20000, // 20 seconds timeout
+                    forceNew: false,
+                    autoConnect: true,
+                    upgrade: true,
+                    rememberUpgrade: true,
+                    path: '/socket.io/' // Explicit path
                 });
 
                 newSocket.on('connect', () => {
-                    console.log('🔌 Socket connected');
+                    console.log('🔌 Socket connected successfully');
                 });
 
-                newSocket.on('disconnect', () => {
-                    console.log('🔌 Socket disconnected');
+                newSocket.on('disconnect', (reason) => {
+                    console.log('🔌 Socket disconnected:', reason);
+                    if (reason === 'io server disconnect') {
+                        // Server disconnected the socket, reconnect manually
+                        newSocket.connect();
+                    }
                 });
 
                 newSocket.on('connect_error', (error) => {
-                    console.log('🔌 Socket connection error:', error.message);
+                    console.warn('🔌 Socket connection error:', error.message);
+                    // Don't spam console with connection errors
+                    // Only log if it's not a timeout/connection refused
+                    if (!error.message.includes('timeout') && !error.message.includes('ECONNREFUSED')) {
+                        console.error('Socket error details:', error);
+                    }
+                });
+
+                newSocket.on('reconnect', (attemptNumber) => {
+                    console.log(`🔌 Socket reconnected after ${attemptNumber} attempts`);
+                });
+
+                newSocket.on('reconnect_attempt', (attemptNumber) => {
+                    console.log(`🔌 Socket reconnection attempt ${attemptNumber}`);
+                });
+
+                newSocket.on('reconnect_error', (error) => {
+                    console.warn('🔌 Socket reconnection error:', error.message);
+                });
+
+                newSocket.on('reconnect_failed', () => {
+                    console.error('🔌 Socket reconnection failed. Please refresh the page.');
                 });
 
                 // Listen for new notifications
@@ -59,12 +120,18 @@ export function NotificationProvider({ children }) {
 
                 // Cleanup on unmount or user change
                 return () => {
+                    if (newSocket.connected) {
+                        newSocket.disconnect();
+                    }
                     newSocket.close();
                 };
             }
         } else {
             // User logged out, close socket
             if (socket) {
+                if (socket.connected) {
+                    socket.disconnect();
+                }
                 socket.close();
                 setSocket(null);
             }

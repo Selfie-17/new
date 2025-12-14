@@ -85,9 +85,10 @@ body {
     @apply flex items-start gap-2 list-none;
 }
 
-/* Inline code */
+/* Inline code - uses relative sizing so it matches parent element */
 .markdown-preview code:not(pre code) {
-    @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono;
+    @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded font-mono;
+    font-size: 0.9em;
 }
 
 /* Code blocks */
@@ -119,24 +120,37 @@ body {
 }
 
 /* Tables */
+.markdown-preview .table-container {
+    @apply overflow-x-auto my-4;
+}
+
 .markdown-preview table {
-    @apply w-full border-collapse mb-4 text-sm;
+    @apply w-full border-collapse text-sm min-w-full;
+    border-spacing: 0;
 }
 
 .markdown-preview thead {
-    @apply bg-gray-50;
+    @apply bg-gray-100;
+}
+
+.markdown-preview tbody {
+    @apply bg-white;
 }
 
 .markdown-preview th {
-    @apply border border-gray-300 px-4 py-2 font-semibold text-left text-gray-700;
+    @apply border border-gray-300 px-4 py-2 font-semibold text-left text-gray-800 bg-gray-100;
 }
 
 .markdown-preview td {
-    @apply border border-gray-300 px-4 py-2 text-gray-600;
+    @apply border border-gray-300 px-4 py-2 text-gray-700;
+}
+
+.markdown-preview tr:nth-child(even) {
+    @apply bg-gray-50;
 }
 
 .markdown-preview tr:hover {
-    @apply bg-gray-50;
+    @apply bg-blue-50;
 }
 
 /* Table alignment */

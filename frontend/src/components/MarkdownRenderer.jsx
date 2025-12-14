@@ -68,8 +68,28 @@ const customComponents = {
     code({ node, inline, className, children, ...props }) {
         const match = /language-(\w+)/.exec(className || '');
         const language = match ? match[1] : '';
+        const codeContent = String(children).replace(/\n$/, '');
 
-        if (!inline && language) {
+        // Check if this is inline code
+        // In newer react-markdown versions, inline might be undefined
+        // We can detect inline by checking if parent is not 'pre' or by checking node properties
+        const isInline = inline === true || inline === undefined && !className && codeContent.indexOf('\n') === -1;
+
+        // Inline code (single backticks like `hi`)
+        if (isInline) {
+            return (
+                <code
+                    className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded font-mono"
+                    style={{ fontSize: '0.9em' }}
+                    {...props}
+                >
+                    {children}
+                </code>
+            );
+        }
+
+        // Code block with language specified
+        if (language) {
             return (
                 <SyntaxHighlighter
                     style={oneDark}
@@ -79,30 +99,22 @@ const customComponents = {
                     showLineNumbers={true}
                     {...props}
                 >
-                    {String(children).replace(/\n$/, '')}
+                    {codeContent}
                 </SyntaxHighlighter>
             );
         }
 
-        // Inline code or code block without language
-        if (!inline) {
-            return (
-                <SyntaxHighlighter
-                    style={oneDark}
-                    language="text"
-                    PreTag="div"
-                    className="rounded-lg my-4 text-sm"
-                    {...props}
-                >
-                    {String(children).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-            );
-        }
-
+        // Code block without language (fenced but no language)
         return (
-            <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
-                {children}
-            </code>
+            <SyntaxHighlighter
+                style={oneDark}
+                language="text"
+                PreTag="div"
+                className="rounded-lg my-4 text-sm"
+                {...props}
+            >
+                {codeContent}
+            </SyntaxHighlighter>
         );
     },
 
@@ -265,8 +277,8 @@ const customComponents = {
         if (type === 'checkbox') {
             return (
                 <span className={`inline-flex items-center justify-center w-4 h-4 rounded border ${checked
-                        ? 'bg-green-500 border-green-500 text-white'
-                        : 'border-gray-400 bg-white'
+                    ? 'bg-green-500 border-green-500 text-white'
+                    : 'border-gray-400 bg-white'
                     } mr-2 mt-0.5 flex-shrink-0`}>
                     {checked && <Check className="w-3 h-3" />}
                 </span>
@@ -303,11 +315,13 @@ const customComponents = {
 
 export default function MarkdownRenderer({ content, className = '' }) {
     // Pre-process content for GitHub-specific features
+    // Note: We intentionally do NOT process @mentions automatically as it can break:
+    // - Code blocks with SQL variables (@var)
+    // - Email addresses (user@domain.com)
+    // - Other @ symbols in technical content
     const processedContent = content
-        // Handle @mentions
-        ?.replace(/@(\w+)/g, '**@$1**')
-        // Handle #issue references  
-        ?.replace(/#(\d+)/g, '[#$1](#issue-$1)')
+        // Handle #issue references (standalone numbers after #)
+        ?.replace(/(^|[\s\(])#(\d+)(?=[\s\.,;:\)\]!?]|$)/gm, '$1[#$2](#issue-$2)')
         // Handle user/repo#issue
         ?.replace(/(\w+\/\w+)#(\d+)/g, '[$1#$2](#repo-issue-$1-$2)');
 

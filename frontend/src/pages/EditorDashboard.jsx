@@ -646,6 +646,28 @@ export default function EditorDashboard() {
         }
     };
 
+    // Sync files from database (refresh/reload files)
+    const handleSyncFiles = async () => {
+        setLoading(true);
+        try {
+            await fetchData();
+            setAlertModal({
+                isOpen: true,
+                message: 'Files refreshed from database successfully!',
+                type: 'success'
+            });
+        } catch (error) {
+            setAlertModal({
+                isOpen: true,
+                message: 'Failed to refresh files from database',
+                type: 'error'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Sync folder from GitHub
     const handleSyncFolderFromGithub = async (folderId) => {
         setSyncingFolder(folderId);
         try {
@@ -678,6 +700,36 @@ export default function EditorDashboard() {
         URL.revokeObjectURL(url);
     };
 
+    // Download folder as ZIP
+    const handleDownloadFolder = async (folderId, folderName) => {
+        try {
+            const response = await axios.get(`/api/folders/${folderId}/download`, {
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'application/zip' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${folderName}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            setAlertModal({
+                isOpen: true,
+                message: `Folder "${folderName}" downloaded successfully!`,
+                type: 'success'
+            });
+        } catch (error) {
+            console.error('Download folder error:', error);
+            setAlertModal({
+                isOpen: true,
+                message: error?.response?.data?.message || 'Failed to download folder',
+                type: 'error'
+            });
+        }
+    };
+
     const handleDeleteFile = () => {
         if (!currentFileId || !isOwnFile) return;
         setDeleteModal({
@@ -691,16 +743,33 @@ export default function EditorDashboard() {
         const { file, isFromEditor } = deleteModal;
         if (!file) return;
 
-        try {
-            await axios.delete(`/api/files/${file._id}`);
-            setDeleteModal({ isOpen: false, file: null, isFromEditor: false });
-            setAlertModal({ isOpen: true, message: 'File deleted successfully!', type: 'success' });
+        const fileId = file._id;
 
-            if (isFromEditor) {
+        try {
+            await axios.delete(`/api/files/${fileId}`);
+
+            // Immediately remove file from local state for instant UI update
+            setFiles(prev => prev.filter(f => f._id !== fileId));
+            setMyFiles(prev => prev.filter(f => f._id !== fileId));
+
+            // Clear selected file if it's the one being deleted
+            if (selectedFile && selectedFile._id === fileId) {
+                setSelectedFile(null);
+            }
+
+            // Clear edit state if editing the deleted file
+            if (isFromEditor || currentFileId === fileId) {
                 setIsEditing(false);
                 setSelectedFile(null);
                 setCurrentFileId(null);
+                setEditContent('');
+                setEditFileName('');
             }
+
+            setDeleteModal({ isOpen: false, file: null, isFromEditor: false });
+            setAlertModal({ isOpen: true, message: 'File deleted successfully!', type: 'success' });
+
+            // Refresh data from server to ensure consistency
             fetchData();
         } catch (error) {
             console.error('Delete error:', error?.response?.data || error);
@@ -836,23 +905,6 @@ export default function EditorDashboard() {
                                         <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
                                             Editable
                                         </span>
-                                        {file.githubSource?.downloadUrl && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleSyncFromGithub(file._id);
-                                                }}
-                                                disabled={syncingFile === file._id}
-                                                className="p-1.5 hover:bg-gray-100 rounded-lg transition"
-                                                title="Sync from GitHub"
-                                            >
-                                                {syncingFile === file._id ? (
-                                                    <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
-                                                ) : (
-                                                    <RefreshCw className="w-4 h-4 text-gray-500" />
-                                                )}
-                                            </button>
-                                        )}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -1504,20 +1556,6 @@ export default function EditorDashboard() {
                             >
                                 <Download className="w-5 h-5 text-gray-600" />
                             </button>
-                            {isOwnFile && selectedFile.githubSource?.downloadUrl && (
-                                <button
-                                    onClick={() => handleSyncFromGithub(currentFileId)}
-                                    disabled={syncingFile === currentFileId}
-                                    className="p-2 hover:bg-gray-100 rounded-lg transition"
-                                    title="Sync from GitHub"
-                                >
-                                    {syncingFile === currentFileId ? (
-                                        <Loader2 className="w-5 h-5 text-gray-600 animate-spin" />
-                                    ) : (
-                                        <RefreshCw className="w-5 h-5 text-gray-600" />
-                                    )}
-                                </button>
-                            )}
                             {isOwnFile && (
                                 <button
                                     onClick={handleDeleteFile}
@@ -1636,6 +1674,24 @@ export default function EditorDashboard() {
                     >
                         <Github className="w-4 h-4 mr-1.5" />
                         GitHub
+                    </button>
+                    <button
+                        onClick={handleSyncFiles}
+                        disabled={loading}
+                        className="inline-flex items-center px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm disabled:opacity-50"
+                        title="Refresh files from database"
+                    >
+                        {loading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                                Syncing...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="w-4 h-4 mr-1.5" />
+                                Sync Files
+                            </>
+                        )}
                     </button>
                     <button
                         onClick={() => setIsUploadModalVisible(true)}
@@ -1782,24 +1838,38 @@ export default function EditorDashboard() {
                                         <FolderOpen className="w-4 h-4" />
                                         Open Folder
                                     </button>
-                                    {folder.githubSource?.repo && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleSyncFolderFromGithub(folder._id);
-                                            }}
-                                            disabled={syncingFolder === folder._id}
-                                            className="px-3 py-2 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition flex items-center justify-center gap-1 disabled:opacity-50"
-                                            title="Sync all files from GitHub"
-                                        >
-                                            {syncingFolder === folder._id ? (
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="w-4 h-4" />
-                                            )}
-                                            Sync
-                                        </button>
-                                    )}
+                                    {/* Download folder as ZIP */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDownloadFolder(folder._id, folder.name);
+                                        }}
+                                        className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center justify-center gap-1"
+                                        title="Download folder as ZIP"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                    </button>
+                                    {/* Only show sync button on root repo folder (no parent, empty path) */}
+                                    {folder.githubSource?.repo &&
+                                        (!folder.githubSource.path || folder.githubSource.path === '') &&
+                                        !folder.parent && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSyncFolderFromGithub(folder._id);
+                                                }}
+                                                disabled={syncingFolder === folder._id}
+                                                className="px-3 py-2 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition flex items-center justify-center gap-1 disabled:opacity-50"
+                                                title="Sync repository from GitHub"
+                                            >
+                                                {syncingFolder === folder._id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="w-4 h-4" />
+                                                )}
+                                                Sync
+                                            </button>
+                                        )}
                                 </div>
                             </div>
                         ))}
@@ -2005,25 +2075,6 @@ export default function EditorDashboard() {
                             >
                                 Close
                             </button>
-                            {selectedFile.githubSource?.downloadUrl && myFiles.some(f => f._id === selectedFile._id) && (
-                                <button
-                                    onClick={() => handleSyncFromGithub(selectedFile._id)}
-                                    disabled={syncingFile === selectedFile._id}
-                                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {syncingFile === selectedFile._id ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Syncing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <RefreshCw className="w-4 h-4" />
-                                            Sync from GitHub
-                                        </>
-                                    )}
-                                </button>
-                            )}
                             <button
                                 onClick={() => handleStartEdit(selectedFile, myFiles.some(f => f._id === selectedFile._id))}
                                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"

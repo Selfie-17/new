@@ -20,7 +20,8 @@ const folderSchema = new mongoose.Schema({
     githubSource: {
         owner: { type: String, default: null },
         repo: { type: String, default: null },
-        path: { type: String, default: null }
+        path: { type: String, default: null },
+        lastCommitSha: { type: String, default: null } // Store latest commit SHA to detect changes
     }
 }, {
     timestamps: true

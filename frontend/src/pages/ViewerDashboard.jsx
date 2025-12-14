@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github } from 'lucide-react';
+import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2 } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 
@@ -219,6 +219,18 @@ Create a new markdown file.
         setLoading(false);
     };
 
+    // Sync files from database (refresh/reload files)
+    const handleSyncFiles = async () => {
+        setLoading(true);
+        try {
+            await fetchData();
+        } catch (error) {
+            console.error('Sync error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Get folders in current directory
     const getCurrentFolders = () => {
         return folders.filter(folder => {
@@ -330,15 +342,35 @@ Create a new markdown file.
                     <p className="text-gray-500 mt-1">Browse and read all published markdown files</p>
                 </div>
 
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search files and folders..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent w-full sm:w-64"
-                    />
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleSyncFiles}
+                        disabled={loading}
+                        className="inline-flex items-center px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm disabled:opacity-50"
+                        title="Refresh files from database"
+                    >
+                        {loading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                                Syncing...
+                            </>
+                        ) : (
+                            <>
+                                <RefreshCw className="w-4 h-4 mr-1.5" />
+                                Sync Files
+                            </>
+                        )}
+                    </button>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search files and folders..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent w-full sm:w-64"
+                        />
+                    </div>
                 </div>
             </div>
 

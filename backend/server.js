@@ -35,7 +35,7 @@ const allowedOrigins = [
 
 ];
 
-// Socket.io setup with CORS
+// Socket.io setup with CORS and improved timeout settings
 const io = new Server(httpServer, {
     cors: {
         origin: (origin, callback) => {
@@ -51,7 +51,12 @@ const io = new Server(httpServer, {
         },
         methods: ['GET', 'POST'],
         credentials: true
-    }
+    },
+    pingTimeout: 60000, // 60 seconds
+    pingInterval: 25000, // 25 seconds
+    connectTimeout: 20000, // 20 seconds
+    transports: ['websocket', 'polling'],
+    allowEIO3: true // Allow Engine.IO v3 clients
 });
 
 // Set socket.io instance for notification service

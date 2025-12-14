@@ -292,7 +292,14 @@ export default function AdminDashboard() {
         setDeletingItem(fileId);
         try {
             await axios.delete(`/api/files/${fileId}`);
+            
+            // Immediately remove file from local state for instant UI update
+            setFiles(prev => prev.filter(f => f._id !== fileId));
+            setAllFiles(prev => prev.filter(f => f._id !== fileId));
+            
             setNotification({ type: 'success', message: 'File deleted successfully!' });
+            
+            // Refresh data from server to ensure consistency
             fetchData();
         } catch (error) {
             setNotification({ type: 'error', message: error?.response?.data?.message || 'Failed to delete file' });
@@ -337,7 +344,21 @@ export default function AdminDashboard() {
         setTimeout(() => setNotification(null), 3000);
     };
 
-    // Sync entire folder from GitHub
+    // Sync files from database (refresh/reload files)
+    const handleSyncFiles = async () => {
+        setLoading(true);
+        try {
+            await fetchData();
+            setNotification({ type: 'success', message: 'Files refreshed from database successfully!' });
+        } catch (error) {
+            setNotification({ type: 'error', message: 'Failed to refresh files from database' });
+        } finally {
+            setLoading(false);
+            setTimeout(() => setNotification(null), 5000);
+        }
+    };
+
+    // Sync folder from GitHub
     const handleSyncFolderFromGithub = async (folderId) => {
         setSyncingFolder(folderId);
         try {
@@ -595,9 +616,29 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-                <p className="text-gray-500 mt-1">Review and approve edit requests</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                    <p className="text-gray-500 mt-1">Review and approve edit requests</p>
+                </div>
+                <button
+                    onClick={handleSyncFiles}
+                    disabled={loading}
+                    className="inline-flex items-center px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition text-sm disabled:opacity-50"
+                    title="Refresh files from database"
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                            Syncing...
+                        </>
+                    ) : (
+                        <>
+                            <RefreshCw className="w-4 h-4 mr-1.5" />
+                            Sync Files
+                        </>
+                    )}
+                </button>
             </div>
 
             {/* Stats */}
@@ -1199,25 +1240,6 @@ export default function AdminDashboard() {
                                         <span className="text-sm font-medium text-gray-700 text-center truncate w-full">{folder.name}</span>
                                         <span className="text-xs text-gray-400">{folder.author?.name || 'Unknown'}</span>
                                     </button>
-                                    {/* GitHub Sync Button */}
-                                    {folder.githubSource?.repo && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleSyncFolderFromGithub(folder._id);
-                                            }}
-                                            disabled={syncingFolder === folder._id}
-                                            className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
-                                            title="Sync all files from GitHub"
-                                        >
-                                            {syncingFolder === folder._id ? (
-                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="w-3 h-3" />
-                                            )}
-                                            Sync
-                                        </button>
-                                    )}
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -1228,6 +1250,27 @@ export default function AdminDashboard() {
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
+                                    {/* Only show sync button on root repo folder (no parent, empty path) */}
+                                    {folder.githubSource?.repo && 
+                                     (!folder.githubSource.path || folder.githubSource.path === '') &&
+                                     !folder.parent && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSyncFolderFromGithub(folder._id);
+                                            }}
+                                            disabled={syncingFolder === folder._id}
+                                            className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
+                                            title="Sync repository from GitHub"
+                                        >
+                                            {syncingFolder === folder._id ? (
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                                <RefreshCw className="w-3 h-3" />
+                                            )}
+                                            Sync
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -1309,22 +1352,6 @@ export default function AdminDashboard() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        {/* GitHub Sync Button */}
-                                                        {file.githubSource?.downloadUrl && (
-                                                            <button
-                                                                onClick={() => handleSyncFromGithub(file._id)}
-                                                                disabled={syncingFile === file._id}
-                                                                className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition disabled:opacity-50 text-xs font-medium"
-                                                                title="Sync from GitHub"
-                                                            >
-                                                                {syncingFile === file._id ? (
-                                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                                ) : (
-                                                                    <RefreshCw className="w-3.5 h-3.5" />
-                                                                )}
-                                                                Sync
-                                                            </button>
-                                                        )}
                                                         <button
                                                             onClick={() => togglePublishStatus(file._id)}
                                                             disabled={fileProcessing === file._id}

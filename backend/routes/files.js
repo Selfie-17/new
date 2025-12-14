@@ -272,25 +272,71 @@ router.post('/admin/bulk-publish', authenticate, authorize('admin'), async (req,
    DELETE FILE
    Admin: delete any
    Editor: delete any
+   Permanently removes file from database for ALL users
 ========================================================= */
 router.delete('/:id', authenticate, authorize('editor', 'admin'), async (req, res) => {
     try {
-        const file = await File.findById(req.params.id);
+        const fileId = req.params.id;
+
+        // Validate fileId format
+        if (!fileId || !fileId.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({ message: 'Invalid file ID format' });
+        }
+
+        // Find the file first
+        const file = await File.findById(fileId);
         if (!file) {
             return res.status(404).json({ message: 'File not found' });
         }
 
-        await Promise.all([
-            Edit.deleteMany({ file: req.params.id }),
-            Notification.deleteMany({ fileId: req.params.id })
+        // Check permissions - users can only delete their own files unless admin
+        if (file.author.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'You can only delete your own files' });
+        }
+
+        const fileName = file.name;
+        const fileAuthor = file.author.toString();
+
+        console.log(`[DELETE FILE] Deleting file ${fileId} (${fileName}) by user ${req.user._id}`);
+
+        // Delete all related data in parallel
+        const deleteResults = await Promise.all([
+            // Delete all edits associated with this file
+            Edit.deleteMany({ file: fileId }),
+            // Delete all notifications associated with this file
+            Notification.deleteMany({ fileId: fileId }),
+            // Delete all notifications that reference this file in meta or other fields
+            Notification.deleteMany({ 'meta.fileId': fileId })
         ]);
 
-        await File.findByIdAndDelete(req.params.id);
+        const editsDeleted = deleteResults[0].deletedCount || 0;
+        const notificationsDeleted = (deleteResults[1].deletedCount || 0) + (deleteResults[2].deletedCount || 0);
 
-        res.json({ message: 'File deleted successfully' });
+        // Permanently delete the file from database - this removes it for ALL users
+        const deleteResult = await File.findByIdAndDelete(fileId);
+
+        if (!deleteResult) {
+            console.error(`[DELETE FILE] Failed to delete file ${fileId} - file not found during deletion`);
+            return res.status(404).json({ message: 'File not found during deletion' });
+        }
+
+        console.log(`[DELETE FILE] Successfully deleted file ${fileId} (${fileName}). Removed ${editsDeleted} edits and ${notificationsDeleted} notifications`);
+
+        res.json({ 
+            message: 'File deleted successfully',
+            deleted: {
+                fileId: fileId,
+                fileName: fileName,
+                editsDeleted: editsDeleted,
+                notificationsDeleted: notificationsDeleted
+            }
+        });
     } catch (error) {
-        console.error('Error deleting file:', error);
-        res.status(500).json({ message: 'Failed to delete file' });
+        console.error(`[DELETE FILE] Error deleting file ${req.params.id}:`, error);
+        res.status(500).json({ 
+            message: 'Failed to delete file',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 });
 

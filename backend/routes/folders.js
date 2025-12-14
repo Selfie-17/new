@@ -1,4 +1,5 @@
 import express from 'express';
+import archiver from 'archiver';
 import Folder from '../models/Folder.js';
 import File from '../models/File.js';
 import { authenticate, authorize } from '../middleware/auth.js';
@@ -246,10 +247,18 @@ router.put('/:id', authenticate, authorize('editor', 'admin'), async (req, res) 
 /* =========================================================
    DELETE FOLDER (Editor & Admin - own folders only)
    Recursively deletes subfolders and files
+   Permanently removes all files from database for ALL users
 ========================================================= */
 router.delete('/:id', authenticate, authorize('editor', 'admin'), async (req, res) => {
     try {
-        const folder = await Folder.findById(req.params.id);
+        const folderId = req.params.id;
+
+        // Validate folderId format
+        if (!folderId || !folderId.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({ message: 'Invalid folder ID format' });
+        }
+
+        const folder = await Folder.findById(folderId);
         if (!folder) {
             return res.status(404).json({ message: 'Folder not found' });
         }
@@ -258,29 +267,154 @@ router.delete('/:id', authenticate, authorize('editor', 'admin'), async (req, re
             return res.status(403).json({ message: 'You can only delete your own folders' });
         }
 
+        const folderName = folder.name;
+        console.log(`[DELETE FOLDER] Deleting folder ${folderId} (${folderName}) by user ${req.user._id}`);
+
+        // Import Edit and Notification models
+        const Edit = (await import('../models/Edit.js')).default;
+        const Notification = (await import('../models/Notification.js')).default;
+
+        let totalFilesDeleted = 0;
+        let totalEditsDeleted = 0;
+        let totalNotificationsDeleted = 0;
+
         // Recursive function to delete folder and all contents
-        const deleteFolderRecursive = async (folderId) => {
+        const deleteFolderRecursive = async (currentFolderId) => {
             // Find all subfolders
-            const subfolders = await Folder.find({ parent: folderId });
+            const subfolders = await Folder.find({ parent: currentFolderId });
 
             // Recursively delete subfolders
             for (const subfolder of subfolders) {
                 await deleteFolderRecursive(subfolder._id);
             }
 
-            // Delete all files in this folder
-            await File.deleteMany({ folder: folderId });
+            // Get all files in this folder before deleting
+            const filesInFolder = await File.find({ folder: currentFolderId });
+            const fileIds = filesInFolder.map(f => f._id);
+
+            if (fileIds.length > 0) {
+                // Delete all related data for these files
+                const [editsResult, notificationsResult1, notificationsResult2] = await Promise.all([
+                    Edit.deleteMany({ file: { $in: fileIds } }),
+                    Notification.deleteMany({ fileId: { $in: fileIds } }),
+                    Notification.deleteMany({ 'meta.fileId': { $in: fileIds } })
+                ]);
+
+                totalEditsDeleted += editsResult.deletedCount || 0;
+                totalNotificationsDeleted += (notificationsResult1.deletedCount || 0) + (notificationsResult2.deletedCount || 0);
+            }
+
+            // Delete all files in this folder - permanently removes from database for ALL users
+            const filesResult = await File.deleteMany({ folder: currentFolderId });
+            totalFilesDeleted += filesResult.deletedCount || 0;
 
             // Delete the folder itself
-            await Folder.findByIdAndDelete(folderId);
+            await Folder.findByIdAndDelete(currentFolderId);
         };
 
-        await deleteFolderRecursive(req.params.id);
+        await deleteFolderRecursive(folderId);
 
-        res.json({ message: 'Folder and contents deleted successfully' });
+        console.log(`[DELETE FOLDER] Successfully deleted folder ${folderId} (${folderName}). Removed ${totalFilesDeleted} files, ${totalEditsDeleted} edits, and ${totalNotificationsDeleted} notifications`);
+
+        res.json({
+            message: 'Folder and contents deleted successfully',
+            deleted: {
+                folderId: folderId,
+                folderName: folderName,
+                filesDeleted: totalFilesDeleted,
+                editsDeleted: totalEditsDeleted,
+                notificationsDeleted: totalNotificationsDeleted
+            }
+        });
     } catch (error) {
-        console.error('Error deleting folder:', error);
-        res.status(500).json({ message: 'Failed to delete folder' });
+        console.error(`[DELETE FOLDER] Error deleting folder ${req.params.id}:`, error);
+        res.status(500).json({
+            message: 'Failed to delete folder',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+/* =========================================================
+   DOWNLOAD FOLDER AS ZIP
+   Downloads all files in a folder and subfolders as a ZIP file
+========================================================= */
+router.get('/:id/download', authenticate, async (req, res) => {
+    try {
+        const folderId = req.params.id;
+
+        // Validate folderId format
+        if (!folderId || !folderId.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({ message: 'Invalid folder ID format' });
+        }
+
+        const folder = await Folder.findById(folderId);
+        if (!folder) {
+            return res.status(404).json({ message: 'Folder not found' });
+        }
+
+        // Check if user owns the folder, is admin, or if the folder is published
+        const isOwner = folder.author.toString() === req.user._id.toString();
+        const isAdmin = req.user.role === 'admin';
+
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ message: 'You can only download your own folders' });
+        }
+
+        console.log(`[DOWNLOAD FOLDER] Downloading folder ${folderId} (${folder.name}) by user ${req.user._id}`);
+
+        // Set up the response as a ZIP file
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${folder.name}.zip"`);
+
+        // Create a ZIP archive
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // Maximum compression
+        });
+
+        // Pipe the archive to the response
+        archive.pipe(res);
+
+        // Handle archive errors
+        archive.on('error', (err) => {
+            console.error('[DOWNLOAD FOLDER] Archive error:', err);
+            res.status(500).json({ message: 'Failed to create ZIP archive' });
+        });
+
+        // Recursive function to add folder contents to archive
+        const addFolderContents = async (currentFolderId, currentPath) => {
+            // Get all files in this folder
+            const files = await File.find({ folder: currentFolderId });
+
+            for (const file of files) {
+                const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                archive.append(file.content, { name: filePath });
+            }
+
+            // Get all subfolders
+            const subfolders = await Folder.find({ parent: currentFolderId });
+
+            for (const subfolder of subfolders) {
+                const subfolderPath = currentPath ? `${currentPath}/${subfolder.name}` : subfolder.name;
+                await addFolderContents(subfolder._id, subfolderPath);
+            }
+        };
+
+        // Add all folder contents to archive
+        await addFolderContents(folderId, '');
+
+        // Finalize the archive
+        await archive.finalize();
+
+        console.log(`[DOWNLOAD FOLDER] Successfully created ZIP for folder ${folderId} (${folder.name})`);
+    } catch (error) {
+        console.error(`[DOWNLOAD FOLDER] Error downloading folder ${req.params.id}:`, error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                message: 'Failed to download folder',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
     }
 });
 
