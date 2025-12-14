@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2 } from 'lucide-react';
+import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 
@@ -14,6 +14,45 @@ export default function ViewerDashboard() {
     // Folder navigation state
     const [currentFolder, setCurrentFolder] = useState(null); // null = root
     const [folderPath, setFolderPath] = useState([]); // breadcrumb path
+
+    // Sort state
+    const [sortBy, setSortBy] = useState('name'); // 'name', 'date', 'author'
+    const [sortDirection, setSortDirection] = useState('asc'); // 'asc', 'desc'
+
+    // Sort files helper function
+    const sortFiles = (filesToSort) => {
+        return [...filesToSort].sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortBy) {
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '');
+                    break;
+                case 'date':
+                    comparison = new Date(a.updatedAt || a.createdAt) - new Date(b.updatedAt || b.createdAt);
+                    break;
+                case 'author':
+                    const authorA = a.author?.name || a.author?.email || '';
+                    const authorB = b.author?.name || b.author?.email || '';
+                    comparison = authorA.localeCompare(authorB);
+                    break;
+                default:
+                    comparison = 0;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    };
+
+    // Toggle sort direction or change sort field
+    const handleSort = (field) => {
+        if (sortBy === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortDirection('asc');
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -303,9 +342,9 @@ Create a new markdown file.
         folder.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const filteredFiles = getCurrentFiles().filter(file =>
+    const filteredFiles = sortFiles(getCurrentFiles().filter(file =>
         file.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ));
 
     if (loading) {
         return (
@@ -402,6 +441,47 @@ Create a new markdown file.
                         </div>
                     ))}
                 </div>
+            </div>
+
+            {/* Sort Controls */}
+            <div className="flex items-center gap-2 bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+                <span className="text-sm text-gray-500 font-medium px-2">Sort by:</span>
+                <button
+                    onClick={() => handleSort('name')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'name'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                >
+                    Name
+                    {sortBy === 'name' && (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                </button>
+                <button
+                    onClick={() => handleSort('date')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'date'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                >
+                    Date
+                    {sortBy === 'date' && (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                </button>
+                <button
+                    onClick={() => handleSort('author')}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'author'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                >
+                    Author
+                    {sortBy === 'author' && (
+                        sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                    )}
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -28,7 +28,9 @@ import {
     Home,
     Github,
     RefreshCw,
-    Loader2
+    Loader2,
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import DiffViewer from '../components/DiffViewer';
@@ -122,6 +124,45 @@ export default function AdminDashboard() {
     const [editUserData, setEditUserData] = useState({ name: '', email: '', role: '' });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
     const [userProcessing, setUserProcessing] = useState(null);
+
+    // Sort state
+    const [sortBy, setSortBy] = useState('name'); // 'name', 'date', 'author'
+    const [sortDirection, setSortDirection] = useState('asc'); // 'asc', 'desc'
+
+    // Sort files helper function
+    const sortFiles = (filesToSort) => {
+        return [...filesToSort].sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortBy) {
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '');
+                    break;
+                case 'date':
+                    comparison = new Date(a.updatedAt || a.createdAt) - new Date(b.updatedAt || b.createdAt);
+                    break;
+                case 'author':
+                    const authorA = a.author?.name || a.author?.email || '';
+                    const authorB = b.author?.name || b.author?.email || '';
+                    comparison = authorA.localeCompare(authorB);
+                    break;
+                default:
+                    comparison = 0;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    };
+
+    // Toggle sort direction or change sort field
+    const handleSort = (field) => {
+        if (sortBy === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortDirection('asc');
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -292,13 +333,13 @@ export default function AdminDashboard() {
         setDeletingItem(fileId);
         try {
             await axios.delete(`/api/files/${fileId}`);
-            
+
             // Immediately remove file from local state for instant UI update
             setFiles(prev => prev.filter(f => f._id !== fileId));
             setAllFiles(prev => prev.filter(f => f._id !== fileId));
-            
+
             setNotification({ type: 'success', message: 'File deleted successfully!' });
-            
+
             // Refresh data from server to ensure consistency
             fetchData();
         } catch (error) {
@@ -373,17 +414,17 @@ export default function AdminDashboard() {
     };
 
     // Filter files by current folder and published status
-    const getPublishedFiles = () => allFiles.filter(f => {
+    const getPublishedFiles = () => sortFiles(allFiles.filter(f => {
         const folderId = f.folder?._id || f.folder || null;
         const inCurrentFolder = folderId === currentAdminFolder;
         return f.published === true && inCurrentFolder;
-    });
+    }));
 
-    const getUnpublishedFiles = () => allFiles.filter(f => {
+    const getUnpublishedFiles = () => sortFiles(allFiles.filter(f => {
         const folderId = f.folder?._id || f.folder || null;
         const inCurrentFolder = folderId === currentAdminFolder;
         return f.published === false && inCurrentFolder;
-    });
+    }));
 
     // Get folders in current location filtered by file publish status
     const getPublishedFolders = () => {
@@ -455,6 +496,12 @@ export default function AdminDashboard() {
             });
         });
     };
+
+    // Get all files in current folder (regardless of published status)
+    const getAllFilesInFolder = () => sortFiles(allFiles.filter(f => {
+        const folderId = f.folder?._id || f.folder || null;
+        return folderId === currentAdminFolder;
+    }));
 
     // Get all folders at current level (for showing all folders)
     const getCurrentFolders = () => {
@@ -1120,8 +1167,22 @@ export default function AdminDashboard() {
             {/* Files Tab Content */}
             {activeTab === 'files' && (
                 <div className="space-y-4">
-                    {/* Sub-tabs for Published/Unpublished */}
+                    {/* Sub-tabs for All/Published/Unpublished */}
                     <div className="flex items-center gap-4 bg-white rounded-xl shadow-sm border border-gray-200 p-2">
+                        <button
+                            onClick={() => {
+                                setFilesTab('all');
+                                setCurrentAdminFolder(null);
+                                setAdminFolderPath([]);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition ${filesTab === 'all'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            <FileText className="w-4 h-4" />
+                            All Files ({allFiles.length})
+                        </button>
                         <button
                             onClick={() => {
                                 setFilesTab('published');
@@ -1217,9 +1278,9 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Folders Grid */}
-                    {(filesTab === 'published' ? getPublishedFolders() : getUnpublishedFolders()).length > 0 && (
+                    {(filesTab === 'all' ? getCurrentFolders() : filesTab === 'published' ? getPublishedFolders() : getUnpublishedFolders()).length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            {(filesTab === 'published' ? getPublishedFolders() : getUnpublishedFolders()).map((folder) => (
+                            {(filesTab === 'all' ? getCurrentFolders() : filesTab === 'published' ? getPublishedFolders() : getUnpublishedFolders()).map((folder) => (
                                 <div
                                     key={folder._id}
                                     className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition group relative"
@@ -1234,8 +1295,8 @@ export default function AdminDashboard() {
                                         onClick={() => navigateToFolder(folder)}
                                         className="w-full flex flex-col items-center gap-2"
                                     >
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${filesTab === 'published' ? 'bg-green-100 group-hover:bg-green-200' : 'bg-yellow-100 group-hover:bg-yellow-200'} transition`}>
-                                            <Folder className={`w-6 h-6 ${filesTab === 'published' ? 'text-green-600' : 'text-yellow-600'}`} />
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${filesTab === 'all' ? 'bg-purple-100 group-hover:bg-purple-200' : filesTab === 'published' ? 'bg-green-100 group-hover:bg-green-200' : 'bg-yellow-100 group-hover:bg-yellow-200'} transition`}>
+                                            <Folder className={`w-6 h-6 ${filesTab === 'all' ? 'text-purple-600' : filesTab === 'published' ? 'text-green-600' : 'text-yellow-600'}`} />
                                         </div>
                                         <span className="text-sm font-medium text-gray-700 text-center truncate w-full">{folder.name}</span>
                                         <span className="text-xs text-gray-400">{folder.author?.name || 'Unknown'}</span>
@@ -1251,30 +1312,71 @@ export default function AdminDashboard() {
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                     {/* Only show sync button on root repo folder (no parent, empty path) */}
-                                    {folder.githubSource?.repo && 
-                                     (!folder.githubSource.path || folder.githubSource.path === '') &&
-                                     !folder.parent && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleSyncFolderFromGithub(folder._id);
-                                            }}
-                                            disabled={syncingFolder === folder._id}
-                                            className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
-                                            title="Sync repository from GitHub"
-                                        >
-                                            {syncingFolder === folder._id ? (
-                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                            ) : (
-                                                <RefreshCw className="w-3 h-3" />
-                                            )}
-                                            Sync
-                                        </button>
-                                    )}
+                                    {folder.githubSource?.repo &&
+                                        (!folder.githubSource.path || folder.githubSource.path === '') &&
+                                        !folder.parent && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSyncFolderFromGithub(folder._id);
+                                                }}
+                                                disabled={syncingFolder === folder._id}
+                                                className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
+                                                title="Sync repository from GitHub"
+                                            >
+                                                {syncingFolder === folder._id ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                ) : (
+                                                    <RefreshCw className="w-3 h-3" />
+                                                )}
+                                                Sync
+                                            </button>
+                                        )}
                                 </div>
                             ))}
                         </div>
                     )}
+
+                    {/* Sort Controls */}
+                    <div className="flex items-center gap-2 bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+                        <span className="text-sm text-gray-500 font-medium px-2">Sort by:</span>
+                        <button
+                            onClick={() => handleSort('name')}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'name'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            Name
+                            {sortBy === 'name' && (
+                                sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                        </button>
+                        <button
+                            onClick={() => handleSort('date')}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'date'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            Date
+                            {sortBy === 'date' && (
+                                sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                        </button>
+                        <button
+                            onClick={() => handleSort('author')}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'author'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                        >
+                            Author
+                            {sortBy === 'author' && (
+                                sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                        </button>
+                    </div>
 
                     {/* Files List */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1290,11 +1392,16 @@ export default function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {(filesTab === 'published' ? getPublishedFiles() : getUnpublishedFiles()).length === 0 ? (
+                                    {(filesTab === 'all' ? getAllFilesInFolder() : filesTab === 'published' ? getPublishedFiles() : getUnpublishedFiles()).length === 0 ? (
                                         <tr>
                                             <td colSpan="5" className="px-4 py-12 text-center">
                                                 <div className="flex flex-col items-center">
-                                                    {filesTab === 'published' ? (
+                                                    {filesTab === 'all' ? (
+                                                        <>
+                                                            <FileText className="w-12 h-12 text-gray-300 mb-3" />
+                                                            <p className="text-gray-500">No files in this folder</p>
+                                                        </>
+                                                    ) : filesTab === 'published' ? (
                                                         <>
                                                             <Globe className="w-12 h-12 text-gray-300 mb-3" />
                                                             <p className="text-gray-500">No published files in this folder</p>
@@ -1309,7 +1416,7 @@ export default function AdminDashboard() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        (filesTab === 'published' ? getPublishedFiles() : getUnpublishedFiles()).map((file) => (
+                                        (filesTab === 'all' ? getAllFilesInFolder() : filesTab === 'published' ? getPublishedFiles() : getUnpublishedFiles()).map((file) => (
                                             <tr key={file._id} className="hover:bg-gray-50 transition">
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-3">
