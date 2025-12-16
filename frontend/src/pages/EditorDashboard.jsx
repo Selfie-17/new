@@ -35,6 +35,7 @@ import { useAuth } from '../context/AuthContext';
 import DiffViewer from '../components/DiffViewer';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import SyncScrollEditor from '../components/SyncScrollEditor';
+import { downloadAsPdf } from '../utils/downloadPdf.jsx';
 
 export default function EditorDashboard() {
     const { user } = useAuth();
@@ -1841,8 +1842,8 @@ export default function EditorDashboard() {
                         <button
                             onClick={() => handleSort('name')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'name'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Name
@@ -1853,8 +1854,8 @@ export default function EditorDashboard() {
                         <button
                             onClick={() => handleSort('date')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'date'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Date
@@ -1865,8 +1866,8 @@ export default function EditorDashboard() {
                         <button
                             onClick={() => handleSort('author')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'author'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Author
@@ -1990,6 +1991,16 @@ export default function EditorDashboard() {
                                     >
                                         <Edit className="w-4 h-4" />
                                         Edit & Save
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            downloadAsPdf(file, MarkdownRenderer);
+                                        }}
+                                        className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center justify-center gap-1"
+                                        title="Download as PDF"
+                                    >
+                                        <Download className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => handleDeleteFileFromList(file)}

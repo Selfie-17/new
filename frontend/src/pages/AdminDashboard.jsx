@@ -30,11 +30,13 @@ import {
     RefreshCw,
     Loader2,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    Download
 } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import DiffViewer from '../components/DiffViewer';
 import MarkdownRenderer from '../components/MarkdownRenderer';
+import { downloadAsPdf } from '../utils/downloadPdf.jsx';
 
 // Demo data for fallback
 const demoUsers = [
@@ -411,6 +413,35 @@ export default function AdminDashboard() {
         }
         setSyncingFolder(null);
         setTimeout(() => setNotification(null), 5000);
+    };
+
+    // Download file as PDF (using the same MarkdownRenderer as preview)
+    const handleDownloadFile = (file) => {
+        downloadAsPdf(file, MarkdownRenderer);
+    };
+
+    // Download folder as ZIP
+    const handleDownloadFolder = async (folderId, folderName) => {
+        try {
+            const response = await axios.get(`/api/folders/${folderId}/download`, {
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'application/zip' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${folderName}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            setNotification({ type: 'success', message: `Folder "${folderName}" downloaded successfully!` });
+            setTimeout(() => setNotification(null), 3000);
+        } catch (error) {
+            console.error('Download folder error:', error);
+            setNotification({ type: 'error', message: 'Failed to download folder' });
+            setTimeout(() => setNotification(null), 3000);
+        }
     };
 
     // Filter files by current folder and published status
@@ -1321,7 +1352,7 @@ export default function AdminDashboard() {
                                                     handleSyncFolderFromGithub(folder._id);
                                                 }}
                                                 disabled={syncingFolder === folder._id}
-                                                className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
+                                                className="absolute bottom-2 left-2 right-10 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg hover:bg-gray-900 transition disabled:opacity-50"
                                                 title="Sync repository from GitHub"
                                             >
                                                 {syncingFolder === folder._id ? (
@@ -1332,6 +1363,17 @@ export default function AdminDashboard() {
                                                 Sync
                                             </button>
                                         )}
+                                    {/* Download folder button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDownloadFolder(folder._id, folder.name);
+                                        }}
+                                        className="absolute bottom-2 right-2 p-1.5 bg-gray-100 text-gray-600 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition"
+                                        title="Download folder as ZIP"
+                                    >
+                                        <Download className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -1343,8 +1385,8 @@ export default function AdminDashboard() {
                         <button
                             onClick={() => handleSort('name')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'name'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Name
@@ -1355,8 +1397,8 @@ export default function AdminDashboard() {
                         <button
                             onClick={() => handleSort('date')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'date'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Date
@@ -1367,8 +1409,8 @@ export default function AdminDashboard() {
                         <button
                             onClick={() => handleSort('author')}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'author'
-                                    ? 'bg-purple-100 text-purple-700'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'text-gray-600 hover:bg-gray-100'
                                 }`}
                         >
                             Author
@@ -1481,6 +1523,13 @@ export default function AdminDashboard() {
                                                                     Publish
                                                                 </>
                                                             )}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDownloadFile(file)}
+                                                            className="p-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                                                            title="Download file"
+                                                        >
+                                                            <Download className="w-4 h-4" />
                                                         </button>
                                                         <button
                                                             onClick={() => setShowDeleteFileModal(file)}

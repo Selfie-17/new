@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
+import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import MarkdownRenderer from '../components/MarkdownRenderer';
+import { downloadAsPdf } from '../utils/downloadPdf.jsx';
 
 export default function ViewerDashboard() {
     const [files, setFiles] = useState([]);
@@ -51,6 +52,31 @@ export default function ViewerDashboard() {
         } else {
             setSortBy(field);
             setSortDirection('asc');
+        }
+    };
+
+    // Download file as PDF (using the same MarkdownRenderer as preview)
+    const handleDownloadFile = (file) => {
+        downloadAsPdf(file, MarkdownRenderer);
+    };
+
+    // Download folder as ZIP
+    const handleDownloadFolder = async (folderId, folderName) => {
+        try {
+            const response = await axios.get(`/api/folders/${folderId}/download`, {
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'application/zip' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${folderName}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download folder error:', error);
+            alert('Failed to download folder. Please try again.');
         }
     };
 
@@ -449,8 +475,8 @@ Create a new markdown file.
                 <button
                     onClick={() => handleSort('name')}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'name'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-100'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-gray-600 hover:bg-gray-100'
                         }`}
                 >
                     Name
@@ -461,8 +487,8 @@ Create a new markdown file.
                 <button
                     onClick={() => handleSort('date')}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'date'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-100'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-gray-600 hover:bg-gray-100'
                         }`}
                 >
                     Date
@@ -473,8 +499,8 @@ Create a new markdown file.
                 <button
                     onClick={() => handleSort('author')}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition ${sortBy === 'author'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'text-gray-600 hover:bg-gray-100'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-gray-600 hover:bg-gray-100'
                         }`}
                 >
                     Author
@@ -512,62 +538,90 @@ Create a new markdown file.
                             <>
                                 {/* Folders */}
                                 {filteredFolders.map((folder) => (
-                                    <button
+                                    <div
                                         key={folder._id}
-                                        onClick={() => handleNavigateToFolder(folder)}
-                                        className="w-full p-4 text-left hover:bg-gray-50 transition flex items-center gap-3"
+                                        className="w-full p-4 hover:bg-gray-50 transition flex items-center gap-3"
                                     >
-                                        <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center relative">
-                                            <Folder className="w-5 h-5 text-yellow-600" />
-                                            {folder.githubSource?.repo && (
-                                                <div className="absolute -top-1 -right-1 p-0.5 bg-gray-200 rounded-full">
-                                                    <Github className="w-2.5 h-2.5 text-gray-600" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-gray-900 truncate">{folder.name}</p>
-                                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                                                <User className="w-3 h-3" />
-                                                <span>{folder.author?.name || 'Unknown'}</span>
+                                        <button
+                                            onClick={() => handleNavigateToFolder(folder)}
+                                            className="flex items-center gap-3 flex-1 text-left"
+                                        >
+                                            <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center relative">
+                                                <Folder className="w-5 h-5 text-yellow-600" />
+                                                {folder.githubSource?.repo && (
+                                                    <div className="absolute -top-1 -right-1 p-0.5 bg-gray-200 rounded-full">
+                                                        <Github className="w-2.5 h-2.5 text-gray-600" />
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                        <ChevronRight className="w-5 h-5 text-gray-400" />
-                                    </button>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-gray-900 truncate">{folder.name}</p>
+                                                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                                                    <User className="w-3 h-3" />
+                                                    <span>{folder.author?.name || 'Unknown'}</span>
+                                                </div>
+                                            </div>
+                                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownloadFolder(folder._id, folder.name);
+                                            }}
+                                            className="p-2 hover:bg-gray-200 rounded-lg transition"
+                                            title="Download folder as ZIP"
+                                        >
+                                            <Download className="w-4 h-4 text-gray-600" />
+                                        </button>
+                                    </div>
                                 ))}
 
                                 {/* Files */}
                                 {filteredFiles.map((file) => (
-                                    <button
+                                    <div
                                         key={file._id}
-                                        onClick={() => setSelectedFile(file)}
-                                        className={`w-full p-4 text-left hover:bg-gray-50 transition ${selectedFile?._id === file._id ? 'bg-purple-50 border-l-4 border-purple-600' : ''
+                                        className={`w-full p-4 hover:bg-gray-50 transition flex items-center gap-3 ${selectedFile?._id === file._id ? 'bg-purple-50 border-l-4 border-purple-600' : ''
                                             }`}
                                     >
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center relative">
-                                                    <FileText className="w-5 h-5 text-purple-600" />
-                                                    {file.githubSource?.repo && (
-                                                        <div className="absolute -top-1 -right-1 p-0.5 bg-gray-200 rounded-full">
-                                                            <Github className="w-2.5 h-2.5 text-gray-600" />
+                                        <button
+                                            onClick={() => setSelectedFile(file)}
+                                            className="flex-1 text-left"
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center relative">
+                                                        <FileText className="w-5 h-5 text-purple-600" />
+                                                        {file.githubSource?.repo && (
+                                                            <div className="absolute -top-1 -right-1 p-0.5 bg-gray-200 rounded-full">
+                                                                <Github className="w-2.5 h-2.5 text-gray-600" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{file.name}</p>
+                                                        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                                                            <User className="w-3 h-3" />
+                                                            <span>{file.author?.name}</span>
                                                         </div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-gray-900">{file.name}</p>
-                                                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                                                        <User className="w-3 h-3" />
-                                                        <span>{file.author?.name}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-1 mt-2 text-xs text-gray-400 ml-13">
-                                            <Clock className="w-3 h-3" />
-                                            <span>{new Date(file.updatedAt).toLocaleDateString()}</span>
-                                        </div>
-                                    </button>
+                                            <div className="flex items-center gap-1 mt-2 text-xs text-gray-400 ml-13">
+                                                <Clock className="w-3 h-3" />
+                                                <span>{new Date(file.updatedAt).toLocaleDateString()}</span>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownloadFile(file);
+                                            }}
+                                            className="p-2 hover:bg-gray-200 rounded-lg transition"
+                                            title="Download file"
+                                        >
+                                            <Download className="w-4 h-4 text-gray-600" />
+                                        </button>
+                                    </div>
                                 ))}
                             </>
                         )}
