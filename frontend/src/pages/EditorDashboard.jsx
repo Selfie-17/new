@@ -35,7 +35,7 @@ import { useAuth } from '../context/AuthContext';
 import DiffViewer from '../components/DiffViewer';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import SyncScrollEditor from '../components/SyncScrollEditor';
-import { downloadAsPdf } from '../utils/downloadPdf.jsx';
+import { downloadAsPdf, downloadFolderAsPdfs } from '../utils/downloadPdf.jsx';
 
 export default function EditorDashboard() {
     const { user } = useAuth();
@@ -91,6 +91,9 @@ export default function EditorDashboard() {
     // GitHub sync state
     const [syncingFile, setSyncingFile] = useState(null);
     const [syncingFolder, setSyncingFolder] = useState(null);
+
+    // Search state
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Sort state
     const [sortBy, setSortBy] = useState('name'); // 'name', 'date', 'author'
@@ -384,16 +387,24 @@ export default function EditorDashboard() {
 
     // Get files and folders for current folder view
     const getCurrentFolderContents = () => {
-        const currentFolders = folders.filter(f =>
+        let currentFolders = folders.filter(f =>
             (f.parent === currentFolder) ||
             (f.parent?._id === currentFolder) ||
             (currentFolder === null && !f.parent)
         );
-        const currentFiles = myFiles.filter(f =>
+        let currentFiles = myFiles.filter(f =>
             (f.folder === currentFolder) ||
             (f.folder?._id === currentFolder) ||
             (currentFolder === null && !f.folder)
         );
+
+        // Apply search filter
+        if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase();
+            currentFolders = currentFolders.filter(f => f.name.toLowerCase().includes(term));
+            currentFiles = currentFiles.filter(f => f.name.toLowerCase().includes(term));
+        }
+
         // Apply sorting to files
         return { folders: currentFolders, files: sortFiles(currentFiles) };
     };
@@ -744,31 +755,41 @@ export default function EditorDashboard() {
         URL.revokeObjectURL(url);
     };
 
-    // Download folder as ZIP
+    // Download folder as ZIP of PDFs
     const handleDownloadFolder = async (folderId, folderName) => {
         try {
-            const response = await axios.get(`/api/folders/${folderId}/download`, {
-                responseType: 'blob'
+            setAlertModal({
+                isOpen: true,
+                message: `Generating PDFs for "${folderName}"... This may take a moment.`,
+                type: 'success'
             });
 
-            const blob = new Blob([response.data], { type: 'application/zip' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${folderName}.zip`;
-            a.click();
-            URL.revokeObjectURL(url);
+            // Fetch all files in the folder
+            const response = await axios.get(`/api/folders/${folderId}/files`);
+            const folderFiles = response.data;
+
+            if (!folderFiles || folderFiles.length === 0) {
+                setAlertModal({
+                    isOpen: true,
+                    message: 'No files found in this folder.',
+                    type: 'error'
+                });
+                return;
+            }
+
+            // Download as PDF ZIP
+            await downloadFolderAsPdfs(folderFiles, folderName);
 
             setAlertModal({
                 isOpen: true,
-                message: `Folder "${folderName}" downloaded successfully!`,
+                message: `Folder "${folderName}" downloaded as PDFs successfully!`,
                 type: 'success'
             });
         } catch (error) {
             console.error('Download folder error:', error);
             setAlertModal({
                 isOpen: true,
-                message: error?.response?.data?.message || 'Failed to download folder',
+                message: error?.response?.data?.message || 'Failed to download folder as PDFs',
                 type: 'error'
             });
         }
@@ -1711,7 +1732,18 @@ export default function EditorDashboard() {
                     <p className="text-gray-500 mt-1">Create and edit markdown files</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Search Input */}
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search files..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm w-48"
+                        />
+                    </div>
                     <button
                         onClick={() => setIsGithubModalVisible(true)}
                         className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"

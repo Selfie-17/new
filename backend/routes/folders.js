@@ -140,6 +140,45 @@ router.get('/tree', authenticate, async (req, res) => {
 });
 
 /* =========================================================
+   GET ALL FILES IN FOLDER (including subfolders)
+   For PDF download functionality
+========================================================= */
+router.get('/:id/files', authenticate, async (req, res) => {
+    try {
+        const folderId = req.params.id;
+
+        if (!folderId || !folderId.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({ message: 'Invalid folder ID format' });
+        }
+
+        const folder = await Folder.findById(folderId);
+        if (!folder) {
+            return res.status(404).json({ message: 'Folder not found' });
+        }
+
+        // Recursive function to get all files
+        const getAllFilesRecursive = async (currentFolderId) => {
+            let files = await File.find({ folder: currentFolderId })
+                .populate('author', 'name email');
+
+            const subfolders = await Folder.find({ parent: currentFolderId });
+            for (const subfolder of subfolders) {
+                const subFiles = await getAllFilesRecursive(subfolder._id);
+                files = [...files, ...subFiles];
+            }
+
+            return files;
+        };
+
+        const files = await getAllFilesRecursive(folderId);
+        res.json(files);
+    } catch (error) {
+        console.error('Error fetching folder files:', error);
+        res.status(500).json({ message: 'Failed to fetch folder files' });
+    }
+});
+
+/* =========================================================
    GET SINGLE FOLDER
 ========================================================= */
 router.get('/:id', authenticate, async (req, res) => {

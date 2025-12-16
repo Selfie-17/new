@@ -36,7 +36,7 @@ import {
 import axios from '../config/axiosConfig';
 import DiffViewer from '../components/DiffViewer';
 import MarkdownRenderer from '../components/MarkdownRenderer';
-import { downloadAsPdf } from '../utils/downloadPdf.jsx';
+import { downloadAsPdf, downloadFolderAsPdfs } from '../utils/downloadPdf.jsx';
 
 // Demo data for fallback
 const demoUsers = [
@@ -420,26 +420,29 @@ export default function AdminDashboard() {
         downloadAsPdf(file, MarkdownRenderer);
     };
 
-    // Download folder as ZIP
+    // Download folder as ZIP of PDFs
     const handleDownloadFolder = async (folderId, folderName) => {
         try {
-            const response = await axios.get(`/api/folders/${folderId}/download`, {
-                responseType: 'blob'
-            });
+            setNotification({ type: 'success', message: `Generating PDFs for "${folderName}"... This may take a moment.` });
 
-            const blob = new Blob([response.data], { type: 'application/zip' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${folderName}.zip`;
-            a.click();
-            URL.revokeObjectURL(url);
+            // Fetch all files in the folder
+            const response = await axios.get(`/api/folders/${folderId}/files`);
+            const folderFiles = response.data;
 
-            setNotification({ type: 'success', message: `Folder "${folderName}" downloaded successfully!` });
+            if (!folderFiles || folderFiles.length === 0) {
+                setNotification({ type: 'error', message: 'No files found in this folder.' });
+                setTimeout(() => setNotification(null), 3000);
+                return;
+            }
+
+            // Download as PDF ZIP
+            await downloadFolderAsPdfs(folderFiles, folderName);
+
+            setNotification({ type: 'success', message: `Folder "${folderName}" downloaded as PDFs successfully!` });
             setTimeout(() => setNotification(null), 3000);
         } catch (error) {
             console.error('Download folder error:', error);
-            setNotification({ type: 'error', message: 'Failed to download folder' });
+            setNotification({ type: 'error', message: 'Failed to download folder as PDFs' });
             setTimeout(() => setNotification(null), 3000);
         }
     };

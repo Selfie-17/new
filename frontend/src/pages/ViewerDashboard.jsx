@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FileText, Search, Eye, Clock, User, AlertCircle, Folder, ChevronRight, Home, ArrowLeft, Github, RefreshCw, Loader2, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import axios from '../config/axiosConfig';
 import MarkdownRenderer from '../components/MarkdownRenderer';
-import { downloadAsPdf } from '../utils/downloadPdf.jsx';
+import { downloadAsPdf, downloadFolderAsPdfs, downloadFolderAsMd, downloadAsMd } from '../utils/downloadPdf.jsx';
 
 export default function ViewerDashboard() {
     const [files, setFiles] = useState([]);
@@ -56,26 +56,38 @@ export default function ViewerDashboard() {
     };
 
     // Download file as PDF (using the same MarkdownRenderer as preview)
-    const handleDownloadFile = (file) => {
-        downloadAsPdf(file, MarkdownRenderer);
+    const handleDownloadFile = (file, format = 'pdf') => {
+        if (format === 'md') {
+            downloadAsMd(file);
+        } else {
+            downloadAsPdf(file, MarkdownRenderer);
+        }
     };
 
-    // Download folder as ZIP
-    const handleDownloadFolder = async (folderId, folderName) => {
+    // Download folder as ZIP (PDF or MD format)
+    const handleDownloadFolder = async (folderId, folderName, format = 'pdf') => {
         try {
-            const response = await axios.get(`/api/folders/${folderId}/download`, {
-                responseType: 'blob'
-            });
+            console.log(`[FOLDER DOWNLOAD] Fetching files for folder: ${folderId} (${folderName}) - Format: ${format}`);
 
-            const blob = new Blob([response.data], { type: 'application/zip' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${folderName}.zip`;
-            a.click();
-            URL.revokeObjectURL(url);
+            // Fetch all files in the folder
+            const response = await axios.get(`/api/folders/${folderId}/files`);
+            const folderFiles = response.data;
+
+            console.log(`[FOLDER DOWNLOAD] API returned ${folderFiles?.length || 0} files:`, folderFiles);
+
+            if (!folderFiles || folderFiles.length === 0) {
+                alert('No files found in this folder.');
+                return;
+            }
+
+            // Download based on format
+            if (format === 'md') {
+                await downloadFolderAsMd(folderFiles, folderName);
+            } else {
+                await downloadFolderAsPdfs(folderFiles, folderName, null, MarkdownRenderer);
+            }
         } catch (error) {
-            console.error('Download folder error:', error);
+            console.error('[FOLDER DOWNLOAD] Error:', error);
             alert('Failed to download folder. Please try again.');
         }
     };
@@ -563,16 +575,34 @@ Create a new markdown file.
                                             </div>
                                             <ChevronRight className="w-5 h-5 text-gray-400" />
                                         </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDownloadFolder(folder._id, folder.name);
-                                            }}
-                                            className="p-2 hover:bg-gray-200 rounded-lg transition"
-                                            title="Download folder as ZIP"
-                                        >
-                                            <Download className="w-4 h-4 text-gray-600" />
-                                        </button>
+                                        <div className="relative group">
+                                            <button
+                                                className="p-2 hover:bg-gray-200 rounded-lg transition"
+                                                title="Download folder"
+                                            >
+                                                <Download className="w-4 h-4 text-gray-600" />
+                                            </button>
+                                            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadFolder(folder._id, folder.name, 'pdf');
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-t-lg flex items-center gap-2"
+                                                >
+                                                    📄 As PDF
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadFolder(folder._id, folder.name, 'md');
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-b-lg flex items-center gap-2"
+                                                >
+                                                    📝 As Markdown
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
 
@@ -611,16 +641,34 @@ Create a new markdown file.
                                                 <span>{new Date(file.updatedAt).toLocaleDateString()}</span>
                                             </div>
                                         </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDownloadFile(file);
-                                            }}
-                                            className="p-2 hover:bg-gray-200 rounded-lg transition"
-                                            title="Download file"
-                                        >
-                                            <Download className="w-4 h-4 text-gray-600" />
-                                        </button>
+                                        <div className="relative group">
+                                            <button
+                                                className="p-2 hover:bg-gray-200 rounded-lg transition"
+                                                title="Download file"
+                                            >
+                                                <Download className="w-4 h-4 text-gray-600" />
+                                            </button>
+                                            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadFile(file, 'pdf');
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-t-lg flex items-center gap-2"
+                                                >
+                                                    📄 As PDF
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadFile(file, 'md');
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-b-lg flex items-center gap-2"
+                                                >
+                                                    📝 As Markdown
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </>

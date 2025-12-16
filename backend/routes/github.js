@@ -373,7 +373,7 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
                 if (item.type === 'dir') {
                     // Track this folder path
                     githubFolderPaths.add(item.path);
-                    
+
                     // Find or create subfolder
                     let subfolder = await Folder.findOne({
                         name: item.name,
@@ -410,11 +410,11 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
 
                     // Recursively sync contents
                     await syncContents(item.path, subfolder);
-                    
+
                 } else if (item.type === 'file' && item.name.endsWith('.md')) {
                     // Track this file path
                     githubFilePaths.add(item.path);
-                    
+
                     // Fetch file content from GitHub
                     try {
                         const fileResponse = await fetch(item.download_url, {
@@ -429,15 +429,30 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
 
                         const newContent = await fileResponse.text();
 
-                        // Check if file already exists in this folder
+                        // Check if file already exists - first by GitHub path (handles renames)
                         let existingFile = await File.findOne({
-                            name: item.name,
-                            folder: parentFolder._id
+                            'githubSource.path': item.path,
+                            'githubSource.owner': owner,
+                            'githubSource.repo': repo
                         });
 
+                        // If not found by path, check if file with same name exists in folder
+                        if (!existingFile) {
+                            existingFile = await File.findOne({
+                                name: item.name,
+                                folder: parentFolder._id
+                            });
+                        }
+
                         if (existingFile) {
+                            // Check if file was renamed in GitHub
+                            if (existingFile.name !== item.name) {
+                                console.log(`[SYNC FOLDER] Renaming file: ${existingFile.name} -> ${item.name}`);
+                                existingFile.name = item.name;
+                            }
+
                             // File exists - check if content has changed
-                            if (existingFile.content === newContent) {
+                            if (existingFile.content === newContent && existingFile.name === item.name) {
                                 // Content is the same, just update lastSyncedAt
                                 existingFile.githubSource = {
                                     owner: owner,
@@ -450,7 +465,7 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
                                 filesUpToDate++;
                                 console.log(`[SYNC FOLDER] File up to date: ${item.path}`);
                             } else {
-                                // Content changed - update file content
+                                // Content or name changed - update file
                                 existingFile.content = newContent;
                                 existingFile.githubSource = {
                                     owner: owner,
@@ -539,14 +554,14 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
         if (filesToRemove.length > 0) {
             const fileIdsToRemove = filesToRemove.map(f => f._id);
             console.log(`[SYNC FOLDER] Removing ${filesToRemove.length} files that no longer exist in GitHub:`, filesToRemove.map(f => f.githubSource?.path).join(', '));
-            
+
             await Promise.all([
                 Edit.deleteMany({ file: { $in: fileIdsToRemove } }),
                 Notification.deleteMany({ fileId: { $in: fileIdsToRemove } }),
                 Notification.deleteMany({ 'meta.fileId': { $in: fileIdsToRemove } }),
                 File.deleteMany({ _id: { $in: fileIdsToRemove } })
             ]);
-            
+
             removedFilesCount = filesToRemove.length;
         }
 
@@ -561,14 +576,14 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
                 removed += subRemoved;
 
                 const folderPath = subfolder.githubSource?.path;
-                
+
                 // Check if this folder exists in GitHub (only check folders with GitHub source)
                 if (folderPath && !githubFolderPaths.has(folderPath)) {
                     // Delete all files in this folder first
                     const filesInFolder = await File.find({ folder: subfolder._id });
                     if (filesInFolder.length > 0) {
                         const fileIdsInFolder = filesInFolder.map(f => f._id);
-                        
+
                         await Promise.all([
                             Edit.deleteMany({ file: { $in: fileIdsInFolder } }),
                             Notification.deleteMany({ fileId: { $in: fileIdsInFolder } }),
@@ -577,7 +592,7 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
                         ]);
                         removedFilesCount += filesInFolder.length;
                     }
-                    
+
                     // Delete the folder
                     await Folder.findByIdAndDelete(subfolder._id);
                     console.log(`[SYNC FOLDER] Removed folder that no longer exists in GitHub: ${folderPath}`);
@@ -608,8 +623,8 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
         if (removedFoldersCount > 0) messageParts.push(`${removedFoldersCount} folders removed`);
         if (foldersCreated > 0) messageParts.push(`${foldersCreated} folders created`);
         if (filesFailed > 0) messageParts.push(`${filesFailed} failed`);
-        
-        const message = messageParts.length > 0 
+
+        const message = messageParts.length > 0
             ? messageParts.join(', ')
             : 'Sync completed - no changes';
 
@@ -629,7 +644,7 @@ router.post('/sync-folder/:folderId', authenticate, authorize('editor', 'admin')
         });
     } catch (error) {
         console.error('[SYNC FOLDER] Error syncing folder from GitHub:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to sync folder from GitHub',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
@@ -657,8 +672,8 @@ router.post('/sync/:fileId', authenticate, authorize('editor', 'admin'), async (
             // Double-check it's not a folder ID that was mistakenly passed
             const folder = await Folder.findById(fileId);
             if (folder) {
-                return res.status(400).json({ 
-                    message: 'Invalid request: This is a folder ID. Use /sync-folder endpoint to sync folders.' 
+                return res.status(400).json({
+                    message: 'Invalid request: This is a folder ID. Use /sync-folder endpoint to sync folders.'
                 });
             }
             return res.status(404).json({ message: 'File not found' });
@@ -671,8 +686,8 @@ router.post('/sync/:fileId', authenticate, authorize('editor', 'admin'), async (
 
         // Check if file has GitHub source with valid downloadUrl
         if (!file.githubSource || !file.githubSource.downloadUrl) {
-            return res.status(400).json({ 
-                message: 'This file was not imported from GitHub or does not have a valid GitHub source URL' 
+            return res.status(400).json({
+                message: 'This file was not imported from GitHub or does not have a valid GitHub source URL'
             });
         }
 
@@ -729,7 +744,7 @@ router.post('/sync/:fileId', authenticate, authorize('editor', 'admin'), async (
         });
     } catch (error) {
         console.error(`[SYNC FILE] Error syncing file ${req.params.fileId} from GitHub:`, error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to sync file from GitHub',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
