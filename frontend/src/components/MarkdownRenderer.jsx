@@ -1,3 +1,4 @@
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -60,6 +61,94 @@ const processGitHubFeatures = (text) => {
     let processed = replaceEmojis(text);
 
     return processed;
+};
+
+// Transform cloud image URLs to direct embeddable URLs
+const transformCloudImageUrl = (url) => {
+    if (!url || typeof url !== 'string') return url;
+
+    // Google Drive: Convert sharing link to direct image URL
+    // Format: https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    // Or: https://drive.google.com/open?id=FILE_ID
+    // Note: File must be shared as "Anyone with the link can view"
+    const googleDriveFileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (googleDriveFileMatch) {
+        const fileId = googleDriveFileMatch[1];
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    const googleDriveOpenMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+    if (googleDriveOpenMatch) {
+        const fileId = googleDriveOpenMatch[1];
+        return `https://drive.google.com/uc?export=view&id=${googleDriveOpenMatch[1]}`;
+    }
+
+    // Google Drive: uc format - ensure export=view
+    const googleDriveUcMatch = url.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
+    if (googleDriveUcMatch) {
+        const fileId = googleDriveUcMatch[1];
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    // Google Photos: these URLs already work directly, don't transform them
+    // Format: https://lh3.googleusercontent.com/...
+    // Only add size parameter if no parameter exists
+    if (url.includes('lh3.googleusercontent.com') || url.includes('lh4.googleusercontent.com') || url.includes('lh5.googleusercontent.com') || url.includes('lh6.googleusercontent.com')) {
+        // These URLs work as-is, return without modification
+        return url;
+    }
+
+    // GitHub: Convert blob URL to raw URL
+    // Format: https://github.com/user/repo/blob/branch/path/to/image.png
+    const githubBlobMatch = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
+    if (githubBlobMatch) {
+        const [, user, repo, branch, path] = githubBlobMatch;
+        return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
+    }
+
+    // GitHub raw content (already correct)
+    if (url.includes('raw.githubusercontent.com')) {
+        return url;
+    }
+
+    // Dropbox: Convert sharing link to direct download link
+    // Format: https://www.dropbox.com/s/xxx/file.png?dl=0
+    if (url.includes('dropbox.com')) {
+        return url.replace('?dl=0', '?raw=1').replace('?dl=1', '?raw=1');
+    }
+
+    // OneDrive: Convert sharing link to direct embeddable URL
+    // Format: https://1drv.ms/... or https://onedrive.live.com/...
+    if (url.includes('1drv.ms') || url.includes('onedrive.live.com')) {
+        // OneDrive embed format
+        if (url.includes('embed')) {
+            return url;
+        }
+        // Convert to embed format if possible
+        return url.replace('redir', 'embed');
+    }
+
+    // Return original URL if no transformation needed
+    return url;
+};
+
+// Image component with cloud URL support
+const ImageWithFallback = ({ src, alt, title, ...props }) => {
+    const transformedSrc = transformCloudImageUrl(src);
+
+    return (
+        <span className="block my-4">
+            <img
+                src={transformedSrc}
+                alt={alt || ''}
+                title={title}
+                className="max-w-full h-auto rounded-lg shadow-sm border border-gray-200"
+                loading="lazy"
+                {...props}
+            />
+            {alt && <span className="block text-center text-sm text-gray-500 mt-2">{alt}</span>}
+        </span>
+    );
 };
 
 // Custom components for ReactMarkdown
@@ -188,22 +277,8 @@ const customComponents = {
         );
     },
 
-    // Images
-    img({ src, alt, title, ...props }) {
-        return (
-            <span className="block my-4">
-                <img
-                    src={src}
-                    alt={alt || ''}
-                    title={title}
-                    className="max-w-full h-auto rounded-lg shadow-sm border border-gray-200"
-                    loading="lazy"
-                    {...props}
-                />
-                {alt && <span className="block text-center text-sm text-gray-500 mt-2">{alt}</span>}
-            </span>
-        );
-    },
+    // Images with cloud URL support
+    img: ImageWithFallback,
 
     // Tables
     table({ children, ...props }) {
